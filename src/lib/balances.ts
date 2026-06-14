@@ -1,5 +1,29 @@
 import { prisma } from "./db";
-import type { User, Expense, ExpenseSplit, Payment } from "@prisma/client";
+
+// ---------------------------------------------------------------------------
+// Derive row types directly from the Prisma client's return types.
+// This avoids any dependency on named exports from "@prisma/client", which
+// Prisma 7 does not expose the same way as older versions.
+// ---------------------------------------------------------------------------
+type DbUser = Awaited<ReturnType<typeof prisma.user.findMany>>[number];
+
+type DbExpenseWithRelations = Awaited<
+  ReturnType<
+    typeof prisma.expense.findMany<{
+      include: { splits: true; paidBy: true };
+    }>
+  >
+>[number];
+
+type DbExpenseSplit = DbExpenseWithRelations["splits"][number];
+
+type DbPaymentWithRelations = Awaited<
+  ReturnType<
+    typeof prisma.payment.findMany<{
+      include: { fromUser: true; toUser: true };
+    }>
+  >
+>[number];
 
 export interface MemberBalance {
   name: string;
@@ -48,7 +72,7 @@ export async function calculateBalances() {
 
   // Initialize balance map for each user
   const balanceMap: { [userId: string]: MemberBalance & { id: string } } = {};
-  users.forEach((u: User) => {
+  users.forEach((u: DbUser) => {
     balanceMap[u.id] = {
       id: u.id,
       name: u.name,
@@ -60,8 +84,8 @@ export async function calculateBalances() {
     };
   });
 
-  // Calculate payments paid by users
-  expenses.forEach((exp: Expense & { splits: ExpenseSplit[]; paidBy: User }) => {
+  // Calculate amounts paid and shares owed per expense
+  expenses.forEach((exp: DbExpenseWithRelations) => {
     const payerId = exp.paidById;
     if (balanceMap[payerId]) {
       // Standardize in INR
@@ -69,7 +93,7 @@ export async function calculateBalances() {
     }
 
     // Calculate shares owed by each split user
-    exp.splits.forEach((split: ExpenseSplit) => {
+    exp.splits.forEach((split: DbExpenseSplit) => {
       const debtorId = split.userId;
       if (balanceMap[debtorId]) {
         balanceMap[debtorId].totalOwed += split.amount; // already in INR in the split table
@@ -78,7 +102,7 @@ export async function calculateBalances() {
   });
 
   // Add payments (settlements)
-  payments.forEach((pay: Payment & { fromUser: User; toUser: User }) => {
+  payments.forEach((pay: DbPaymentWithRelations) => {
     const fromId = pay.fromUserId;
     const toId = pay.toUserId;
 
@@ -91,7 +115,7 @@ export async function calculateBalances() {
   });
 
   // Compute final net balances
-  const balances: MemberBalance[] = Object.values(balanceMap).map(b => {
+  const balances: MemberBalance[] = Object.values(balanceMap).map((b) => {
     // Net balance = what you paid (positive) - what you owe (negative) + payments you sent (positive) - payments you received (negative)
     const netBalance = b.totalPaid - b.totalOwed + b.paymentsSent - b.paymentsRecv;
     return {
@@ -117,13 +141,13 @@ export async function calculateBalances() {
 function simplifyDebts(balances: MemberBalance[]): SimplifiedPayment[] {
   // Filter and map users into debtors (net balance < 0) and creditors (net balance > 0)
   const debtors = balances
-    .filter(b => b.netBalance < -0.05)
-    .map(b => ({ name: b.name, balance: b.netBalance }))
+    .filter((b) => b.netBalance < -0.05)
+    .map((b) => ({ name: b.name, balance: b.netBalance }))
     .sort((a, b) => a.balance - b.balance); // Most negative first
 
   const creditors = balances
-    .filter(b => b.netBalance > 0.05)
-    .map(b => ({ name: b.name, balance: b.netBalance }))
+    .filter((b) => b.netBalance > 0.05)
+    .map((b) => ({ name: b.name, balance: b.netBalance }))
     .sort((a, b) => b.balance - a.balance); // Most positive first
 
   const payments: SimplifiedPayment[] = [];
@@ -139,7 +163,7 @@ function simplifyDebts(balances: MemberBalance[]): SimplifiedPayment[] {
     const amountCredited = creditor.balance;
 
     const paymentAmount = Math.min(amountOwed, amountCredited);
-    
+
     payments.push({
       from: debtor.name,
       to: creditor.name,
@@ -175,23 +199,23 @@ export async function getMemberLedger(memberName: string): Promise<AuditItem[]> 
     where: {
       OR: [
         { paidById: user.id },
-        { splits: { some: { userId: user.id } } }
-      ]
+        { splits: { some: { userId: user.id } } },
+      ],
     },
     include: {
       paidBy: true,
       splits: {
-        where: { userId: user.id }
-      }
+        where: { userId: user.id },
+      },
     },
-    orderBy: { date: "asc" }
+    orderBy: { date: "asc" },
   });
 
-  expenses.forEach(exp => {
+  expenses.forEach((exp) => {
     const isPayer = exp.paidById === user.id;
     const mySplit = exp.splits[0]; // Filtered in query to contain only this user's split
     const myShareInr = mySplit ? mySplit.amount : 0;
-    
+
     // Net effect = (Amount I paid in INR) - (My share in INR)
     const paidInr = isPayer ? exp.amountInr : 0;
     const netEffectInr = paidInr - myShareInr;
@@ -216,17 +240,17 @@ export async function getMemberLedger(memberName: string): Promise<AuditItem[]> 
     where: {
       OR: [
         { fromUserId: user.id },
-        { toUserId: user.id }
-      ]
+        { toUserId: user.id },
+      ],
     },
     include: {
       fromUser: true,
       toUser: true,
     },
-    orderBy: { date: "asc" }
+    orderBy: { date: "asc" },
   });
 
-  payments.forEach(pay => {
+  payments.forEach((pay) => {
     const isSender = pay.fromUserId === user.id;
     // Net effect = (if sender ? -amount : +amount)
     const netEffectInr = isSender ? pay.amount : -pay.amount;
@@ -235,7 +259,9 @@ export async function getMemberLedger(memberName: string): Promise<AuditItem[]> 
       id: pay.id,
       type: "PAYMENT",
       date: pay.date.toISOString().split("T")[0],
-      description: isSender ? `Paid ${pay.toUser.name}` : `Received from ${pay.fromUser.name}`,
+      description: isSender
+        ? `Paid ${pay.toUser.name}`
+        : `Received from ${pay.fromUser.name}`,
       amount: pay.amount,
       currency: pay.currency,
       exchangeRate: 1.0,
@@ -247,5 +273,7 @@ export async function getMemberLedger(memberName: string): Promise<AuditItem[]> 
   });
 
   // Sort by date ascending
-  return ledger.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  return ledger.sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
 }
