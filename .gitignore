@@ -44,3 +44,11 @@ next-env.d.ts
 
 # Assignment PDF
 Updated Assignment_Spreetail.pdf
+
+# Debug / test scripts (not needed in production)
+test-connection.js
+check-schema.js
+setup-db.js
+e2e-test.js
+import_report.md
+
