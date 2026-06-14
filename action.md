@@ -46,3 +46,10 @@ This document tracks all developer actions, feature implementations, and git com
    - Made **Commit 9:** `data: add the messy raw expenses_export.csv spreadsheet file`
 9. **Documentation Files:**
    - Created all 12 requested markdown files describing code, architecture, designs, prompts, and AI errors.
+10. **Premium Light Theme Overhaul & Stepper:**
+   - Redesigned color palette in `design.md` and `globals.css` into Zinc/Slate light theme with matte-glass textures.
+   - Refined typography weights to medium (500) and regular (400) for a less-bolded, elegant layout.
+   - Designed and built a reusable floating `<Tooltip>` component.
+   - Added an interactive data pipeline stepper visualizer to the landing page hero section.
+   - Tested and compiled successfully via `npm run build`.
+   - Pushed changes to Git repository (Commit ce0633f).

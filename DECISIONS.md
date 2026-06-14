@@ -49,3 +49,11 @@ This log documents the significant technical and product design decisions made d
 - **Option B (Timeline-restricted memberships):** Store memberships with `joinedAt` and `leftAt` dates in a `GroupMember` junction table. Exclude inactive members from splits during import.
 - **Chosen Option:** **Option B (Timeline-restricted memberships)**
 - **Reasoning:** Fulfills Sam's request: *"I moved in mid-April. Why would March electricity affect my balance?"* Since Meera moved out at the end of March, and Sam moved in mid-April, storing active timelines ensures Sam is not split into March items and Meera is not billed for April rent.
+
+---
+
+## Decision 7: Premium Light Theme SaaS Aesthetics & Typography
+- **Option A (Default dark mode theme):** Keep the dark atmospheric colors.
+- **Option B (Light-themed editorial dashboard with low-weight fonts):** Apply a slate/white light theme base, thin glass outline borders, custom floating tooltips, and non-bolded/medium-weight Inter display typography.
+- **Chosen Option:** **Option B (Light theme + Less bolded typography)**
+- **Reasoning:** Explicitly requested by the user: *"make our landing page as the proper calsy fonts... and less bolded fonts and non bolded... and use light theme components and ui"*. We paired Inter (sans-serif display headlines) at a medium 500 font-weight with JetBrains Mono (monospaced data grids) at a 400 weight. Matte-glass containers (`#FFFFFF` with 98% opacity and subtle ambient shadows) replaced the dark slates to create an ultra-clean, technical dashboard look. Reusable tooltips were implemented as pure React floating overlays to avoid bloating dependencies or introducing Next.js 16 hydration mismatches.
