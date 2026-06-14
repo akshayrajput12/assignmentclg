@@ -53,3 +53,7 @@ This document tracks all developer actions, feature implementations, and git com
    - Added an interactive data pipeline stepper visualizer to the landing page hero section.
    - Tested and compiled successfully via `npm run build`.
    - Pushed changes to Git repository (Commit ce0633f).
+11. **Hot-Reload Connection Exhaustion Fix:**
+   - Identified that Next.js hot-reloads re-created database pools on every module evaluation, causing connection leaks to Neon PostgreSQL.
+   - Refactored `db.ts` to implement a pool singleton pattern on `globalThis` and constrained dev connections to `max: 2`.
+   - Committed and pushed to remote (Commit 948f2f1).

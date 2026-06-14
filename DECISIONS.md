@@ -57,3 +57,11 @@ This log documents the significant technical and product design decisions made d
 - **Option B (Light-themed editorial dashboard with low-weight fonts):** Apply a slate/white light theme base, thin glass outline borders, custom floating tooltips, and non-bolded/medium-weight Inter display typography.
 - **Chosen Option:** **Option B (Light theme + Less bolded typography)**
 - **Reasoning:** Explicitly requested by the user: *"make our landing page as the proper calsy fonts... and less bolded fonts and non bolded... and use light theme components and ui"*. We paired Inter (sans-serif display headlines) at a medium 500 font-weight with JetBrains Mono (monospaced data grids) at a 400 weight. Matte-glass containers (`#FFFFFF` with 98% opacity and subtle ambient shadows) replaced the dark slates to create an ultra-clean, technical dashboard look. Reusable tooltips were implemented as pure React floating overlays to avoid bloating dependencies or introducing Next.js 16 hydration mismatches.
+
+---
+
+## Decision 8: Connection Pool Singleton for Hot-Reload Resiliency
+- **Option A (Standard Pool instantiation):** Instantiating a new Pool every time `db.ts` is re-evaluated.
+- **Option B (Pool Singleton on globalThis + Restricted Dev Pool Size):** Preserve the database connection pool on `globalThis` across module hot-reloads and limit the concurrent connection threshold to 2 in development.
+- **Chosen Option:** **Option B (Pool Singleton + Restricted Dev Pool Size)**
+- **Reasoning:** In Next.js development mode, hot-reloading frequently re-evaluates modules. While `PrismaClient` was a singleton, the underlying `pg.Pool` was recreated on every evaluation, causing orphan connection pools to quickly exhaust Neon's server connection limits. This triggered connection pool closures, resulting in `ECONNREFUSED` query errors during transactions. Storing the pool on `globalThis` and setting `max: 2` preserves a single connection pool and maintains a minimal connection footprint.
