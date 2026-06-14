@@ -10,7 +10,7 @@ const databaseUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@
 
 const pool = new Pool({ 
   connectionString: databaseUrl,
-  ssl: databaseUrl.includes("neon.tech") ? { rejectUnauthorized: false } : undefined
+  ssl: { rejectUnauthorized: false }
 });
 
 const adapter = new PrismaPg(pool);
