@@ -1,51 +1,12 @@
-import { prisma } from "./db";
-
-// ---------------------------------------------------------------------------
-// Derive row types from Prisma client return types — works with Prisma 7.
-// Prisma 7 does not export named model types from "@prisma/client" directly.
-// ---------------------------------------------------------------------------
-
-// Types for calculateBalances()
-type DbUser = Awaited<ReturnType<typeof prisma.user.findMany>>[number];
-
-type DbExpenseFull = Awaited<
-  ReturnType<typeof prisma.expense.findMany<{ include: { splits: true; paidBy: true } }>>
->[number];
-
-type DbExpenseSplit = DbExpenseFull["splits"][number];
-
-type DbPaymentFull = Awaited<
-  ReturnType<typeof prisma.payment.findMany<{ include: { fromUser: true; toUser: true } }>>
->[number];
-
-// Types for getMemberLedger()
-type DbExpenseLedger = Awaited<
-  ReturnType<
-    typeof prisma.expense.findMany<{
-      include: { paidBy: true; splits: true };
-    }>
-  >
->[number];
-
-type DbPaymentLedger = Awaited<
-  ReturnType<
-    typeof prisma.payment.findMany<{
-      include: { fromUser: true; toUser: true };
-    }>
-  >
->[number];
-
-// ---------------------------------------------------------------------------
-// Public interfaces
-// ---------------------------------------------------------------------------
+import { pool } from "./db";
 
 export interface MemberBalance {
   name: string;
-  totalPaid: number;    // Total amount paid by this user
-  totalOwed: number;    // Total amount this user owes (their share of expenses)
-  paymentsSent: number; // Total direct payments sent by this user
-  paymentsRecv: number; // Total direct payments received by this user
-  netBalance: number;   // netBalance = totalPaid - totalOwed + paymentsSent - paymentsRecv
+  totalPaid: number;
+  totalOwed: number;
+  paymentsSent: number;
+  paymentsRecv: number;
+  netBalance: number;
 }
 
 export interface SimplifiedPayment {
@@ -59,31 +20,37 @@ export interface AuditItem {
   type: "EXPENSE" | "PAYMENT";
   date: string;
   description: string;
-  amount: number;        // Original amount
-  currency: string;      // INR, USD
+  amount: number;
+  currency: string;
   exchangeRate: number;
-  totalInr: number;      // Total cost of expense/payment in INR
-  paidBy: string;        // Payer
-  yourShareInr: number;  // How much you owe for this item
-  netEffectInr: number;  // Net change in your balance
+  totalInr: number;
+  paidBy: string;
+  yourShareInr: number;
+  netEffectInr: number;
 }
 
-// ---------------------------------------------------------------------------
-// calculateBalances — aggregates totals for every roommate
-// ---------------------------------------------------------------------------
-
 export async function calculateBalances() {
-  const users = await prisma.user.findMany();
-  const expenses = await prisma.expense.findMany({
-    include: { splits: true, paidBy: true },
-  });
-  const payments = await prisma.payment.findMany({
-    include: { fromUser: true, toUser: true },
-  });
+  const [usersRes, expensesRes, splitsRes, paymentsRes] = await Promise.all([
+    pool.query<{ id: string; name: string }>(`SELECT id, name FROM "User"`),
+    pool.query<{ id: string; paidById: string; amountInr: number }>(
+      `SELECT id, "paidById", "amountInr" FROM "Expense"`
+    ),
+    pool.query<{ expenseId: string; userId: string; amount: number }>(
+      `SELECT "expenseId", "userId", amount FROM "ExpenseSplit"`
+    ),
+    pool.query<{ fromUserId: string; toUserId: string; amount: number }>(
+      `SELECT "fromUserId", "toUserId", amount FROM "Payment"`
+    ),
+  ]);
 
-  // Initialize balance map
-  const balanceMap: { [userId: string]: MemberBalance & { id: string } } = {};
-  users.forEach((u: DbUser) => {
+  const splitsByExpense: Record<string, Array<{ userId: string; amount: number }>> = {};
+  for (const s of splitsRes.rows) {
+    if (!splitsByExpense[s.expenseId]) splitsByExpense[s.expenseId] = [];
+    splitsByExpense[s.expenseId].push({ userId: s.userId, amount: Number(s.amount) });
+  }
+
+  const balanceMap: Record<string, MemberBalance & { id: string }> = {};
+  for (const u of usersRes.rows) {
     balanceMap[u.id] = {
       id: u.id,
       name: u.name,
@@ -93,34 +60,30 @@ export async function calculateBalances() {
       paymentsRecv: 0,
       netBalance: 0,
     };
-  });
+  }
 
-  // Accumulate expense totals
-  expenses.forEach((exp: DbExpenseFull) => {
+  for (const exp of expensesRes.rows) {
     if (balanceMap[exp.paidById]) {
-      balanceMap[exp.paidById].totalPaid += exp.amountInr;
+      balanceMap[exp.paidById].totalPaid += Number(exp.amountInr);
     }
-    exp.splits.forEach((split: DbExpenseSplit) => {
+    for (const split of splitsByExpense[exp.id] ?? []) {
       if (balanceMap[split.userId]) {
         balanceMap[split.userId].totalOwed += split.amount;
       }
-    });
-  });
+    }
+  }
 
-  // Accumulate settlement totals
-  payments.forEach((pay: DbPaymentFull) => {
+  for (const pay of paymentsRes.rows) {
     if (balanceMap[pay.fromUserId]) {
-      balanceMap[pay.fromUserId].paymentsSent += pay.amount;
+      balanceMap[pay.fromUserId].paymentsSent += Number(pay.amount);
     }
     if (balanceMap[pay.toUserId]) {
-      balanceMap[pay.toUserId].paymentsRecv += pay.amount;
+      balanceMap[pay.toUserId].paymentsRecv += Number(pay.amount);
     }
-  });
+  }
 
-  // Compute final net balances
   const balances: MemberBalance[] = Object.values(balanceMap).map((b) => {
-    const netBalance =
-      b.totalPaid - b.totalOwed + b.paymentsSent - b.paymentsRecv;
+    const netBalance = b.totalPaid - b.totalOwed + b.paymentsSent - b.paymentsRecv;
     return {
       name: b.name,
       totalPaid: Math.round(b.totalPaid * 100) / 100,
@@ -136,10 +99,6 @@ export async function calculateBalances() {
     simplifiedPayments: simplifyDebts(balances),
   };
 }
-
-// ---------------------------------------------------------------------------
-// simplifyDebts — Splitwise-style greedy debt minimisation
-// ---------------------------------------------------------------------------
 
 function simplifyDebts(balances: MemberBalance[]): SimplifiedPayment[] {
   const debtors = balances
@@ -177,86 +136,111 @@ function simplifyDebts(balances: MemberBalance[]): SimplifiedPayment[] {
   return payments;
 }
 
-// ---------------------------------------------------------------------------
-// getMemberLedger — itemised audit trail for a single member (Rohan's view)
-// ---------------------------------------------------------------------------
+export async function getMemberLedger(memberName: string): Promise<AuditItem[]> {
+  const userRes = await pool.query<{ id: string; name: string }>(
+    `SELECT id, name FROM "User" WHERE name = $1`,
+    [memberName]
+  );
+  if (userRes.rows.length === 0) return [];
+  const user = userRes.rows[0];
 
-export async function getMemberLedger(
-  memberName: string
-): Promise<AuditItem[]> {
-  const user = await prisma.user.findUnique({ where: { name: memberName } });
-  if (!user) return [];
+  const [expensesRes, splitsRes, paymentsRes] = await Promise.all([
+    pool.query<{
+      id: string;
+      date: Date;
+      description: string;
+      amount: number;
+      currency: string;
+      exchangeRate: number;
+      amountInr: number;
+      paidById: string;
+      paidByName: string;
+    }>(
+      `SELECT e.id, e.date, e.description, e.amount, e.currency, e."exchangeRate", e."amountInr",
+              e."paidById", u.name AS "paidByName"
+       FROM "Expense" e
+       JOIN "User" u ON u.id = e."paidById"
+       WHERE e."paidById" = $1
+          OR EXISTS (
+            SELECT 1 FROM "ExpenseSplit" s WHERE s."expenseId" = e.id AND s."userId" = $1
+          )
+       ORDER BY e.date ASC`,
+      [user.id]
+    ),
+    pool.query<{ expenseId: string; amount: number }>(
+      `SELECT "expenseId", amount FROM "ExpenseSplit" WHERE "userId" = $1`,
+      [user.id]
+    ),
+    pool.query<{
+      id: string;
+      date: Date;
+      amount: number;
+      currency: string;
+      fromUserId: string;
+      toUserId: string;
+      fromUserName: string;
+      toUserName: string;
+    }>(
+      `SELECT p.id, p.date, p.amount, p.currency, p."fromUserId", p."toUserId",
+              fu.name AS "fromUserName", tu.name AS "toUserName"
+       FROM "Payment" p
+       JOIN "User" fu ON fu.id = p."fromUserId"
+       JOIN "User" tu ON tu.id = p."toUserId"
+       WHERE p."fromUserId" = $1 OR p."toUserId" = $1
+       ORDER BY p.date ASC`,
+      [user.id]
+    ),
+  ]);
+
+  const splitByExpense: Record<string, number> = {};
+  for (const s of splitsRes.rows) {
+    splitByExpense[s.expenseId] = Number(s.amount);
+  }
 
   const ledger: AuditItem[] = [];
 
-  // Expenses where this member is the payer OR has a split entry
-  const expenses = await prisma.expense.findMany({
-    where: {
-      OR: [
-        { paidById: user.id },
-        { splits: { some: { userId: user.id } } },
-      ],
-    },
-    include: {
-      paidBy: true,
-      splits: { where: { userId: user.id } },
-    },
-    orderBy: { date: "asc" },
-  });
-
-  expenses.forEach((exp: DbExpenseLedger) => {
+  for (const exp of expensesRes.rows) {
     const isPayer = exp.paidById === user.id;
-    const mySplit = exp.splits[0];
-    const myShareInr = mySplit ? mySplit.amount : 0;
-    const paidInr = isPayer ? exp.amountInr : 0;
+    const myShareInr = splitByExpense[exp.id] ?? 0;
+    const paidInr = isPayer ? Number(exp.amountInr) : 0;
     const netEffectInr = paidInr - myShareInr;
 
     ledger.push({
       id: exp.id,
       type: "EXPENSE",
-      date: exp.date.toISOString().split("T")[0],
+      date: new Date(exp.date).toISOString().split("T")[0],
       description: exp.description,
-      amount: exp.amount,
+      amount: Number(exp.amount),
       currency: exp.currency,
-      exchangeRate: exp.exchangeRate,
-      totalInr: exp.amountInr,
-      paidBy: exp.paidBy.name,
+      exchangeRate: Number(exp.exchangeRate),
+      totalInr: Number(exp.amountInr),
+      paidBy: exp.paidByName,
       yourShareInr: Math.round(myShareInr * 100) / 100,
       netEffectInr: Math.round(netEffectInr * 100) / 100,
     });
-  });
+  }
 
-  // Payments sent or received by this member
-  const payments = await prisma.payment.findMany({
-    where: {
-      OR: [{ fromUserId: user.id }, { toUserId: user.id }],
-    },
-    include: { fromUser: true, toUser: true },
-    orderBy: { date: "asc" },
-  });
-
-  payments.forEach((pay: DbPaymentLedger) => {
+  for (const pay of paymentsRes.rows) {
     const isSender = pay.fromUserId === user.id;
-    const netEffectInr = isSender ? pay.amount : -pay.amount;
+    const netEffectInr = isSender ? Number(pay.amount) : -Number(pay.amount);
 
     ledger.push({
       id: pay.id,
       type: "PAYMENT",
-      date: pay.date.toISOString().split("T")[0],
+      date: new Date(pay.date).toISOString().split("T")[0],
       description: isSender
-        ? `Paid ${pay.toUser.name}`
-        : `Received from ${pay.fromUser.name}`,
-      amount: pay.amount,
+        ? `Paid ${pay.toUserName}`
+        : `Received from ${pay.fromUserName}`,
+      amount: Number(pay.amount),
       currency: pay.currency,
       exchangeRate: 1.0,
-      totalInr: pay.amount,
-      paidBy: pay.fromUser.name,
+      totalInr: Number(pay.amount),
+      paidBy: pay.fromUserName,
       yourShareInr: 0,
       netEffectInr: Math.round(netEffectInr * 100) / 100,
     });
-  });
+  }
 
-  // Sort by date ascending
   return ledger.sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
