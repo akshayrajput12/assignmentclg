@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import type { User, Expense, ExpenseSplit, Payment } from "@prisma/client";
 
 export interface MemberBalance {
   name: string;
@@ -47,7 +48,7 @@ export async function calculateBalances() {
 
   // Initialize balance map for each user
   const balanceMap: { [userId: string]: MemberBalance & { id: string } } = {};
-  users.forEach(u => {
+  users.forEach((u: User) => {
     balanceMap[u.id] = {
       id: u.id,
       name: u.name,
@@ -60,7 +61,7 @@ export async function calculateBalances() {
   });
 
   // Calculate payments paid by users
-  expenses.forEach(exp => {
+  expenses.forEach((exp: Expense & { splits: ExpenseSplit[]; paidBy: User }) => {
     const payerId = exp.paidById;
     if (balanceMap[payerId]) {
       // Standardize in INR
@@ -68,7 +69,7 @@ export async function calculateBalances() {
     }
 
     // Calculate shares owed by each split user
-    exp.splits.forEach(split => {
+    exp.splits.forEach((split: ExpenseSplit) => {
       const debtorId = split.userId;
       if (balanceMap[debtorId]) {
         balanceMap[debtorId].totalOwed += split.amount; // already in INR in the split table
@@ -77,7 +78,7 @@ export async function calculateBalances() {
   });
 
   // Add payments (settlements)
-  payments.forEach(pay => {
+  payments.forEach((pay: Payment & { fromUser: User; toUser: User }) => {
     const fromId = pay.fromUserId;
     const toId = pay.toUserId;
 
