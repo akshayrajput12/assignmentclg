@@ -229,7 +229,8 @@ export default function Home() {
         body: JSON.stringify({
           expenses: finalExpenses,
           skippedRows,
-          resolvedAnomalies
+          resolvedAnomalies,
+          anomalies: analyzeResult ? analyzeResult.anomalies : []
         }),
       });
 

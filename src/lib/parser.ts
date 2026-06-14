@@ -1,4 +1,4 @@
-import { parse } from "path";
+// parser.ts — CSV ingestion and anomaly detection engine
 
 export interface CSVRow {
   date: string;

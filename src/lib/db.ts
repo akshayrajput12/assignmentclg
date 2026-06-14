@@ -2,37 +2,44 @@ import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-  pgPool: Pool | undefined;
-};
-
-const databaseUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/postgres";
-
-// Reuse the database pool across hot-reloads in development to prevent connection leaks
-const pool =
-  globalForPrisma.pgPool ??
-  new Pool({
-    connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
-    max: process.env.NODE_ENV === "production" ? 10 : 2, // Restrict dev to 2 connections
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-  });
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.pgPool = pool;
+declare global {
+  // eslint-disable-next-line no-var
+  var __pgPool: Pool | undefined;
+  // eslint-disable-next-line no-var
+  var __prisma: PrismaClient | undefined;
 }
 
-const adapter = new PrismaPg(pool);
+const connectionString =
+  process.env.DATABASE_URL ||
+  "postgresql://postgres:postgres@localhost:5432/postgres";
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
+// Singleton pool — prevents connection explosions on Next.js hot-reloads in dev
+export const pool: Pool =
+  globalThis.__pgPool ??
+  new Pool({
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+    // Keep pool small to avoid exhausting Neon's pooler connection limit
+    max: 3,
+    idleTimeoutMillis: 20000,
+    connectionTimeoutMillis: 10000,
   });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  globalThis.__pgPool = pool;
+}
+
+// PrismaClient singleton for read queries (findMany, findUnique, etc.)
+// All write transactions use pool.connect() with raw SQL instead of prisma.$transaction()
+const adapter = new PrismaPg(pool);
+
+export const prisma: PrismaClient =
+  globalThis.__prisma ??
+  new PrismaClient({
+    adapter,
+    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalThis.__prisma = prisma;
 }
