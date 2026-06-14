@@ -1,37 +1,106 @@
-# DESIGN.md — Design System & UI Specifications
-
-This document outlines the premium design system, color palettes, micro-interactions, and visual guidelines used to create a stunning user experience.
-
+---
+version: "light-premium"
+name: "FlatSplit SaaS Light Interface"
+description: "A premium light-themed interface designed for FlatSplit.io. Anchored by thin border details, soft shadows, and clean, low-weight typography (Inter and JetBrains Mono) to project calm authority and technical precision."
+colors:
+  primary: "#10B981" # Emerald 500
+  secondary: "#3B82F6" # Blue 500
+  tertiary: "#F59E0B" # Amber 500
+  neutral: "#0F172A" # Slate 900
+  background: "#F8FAFC" # Slate 50
+  surface: "#FFFFFF" # Pure White
+  text-primary: "#1E293B" # Slate 800
+  text-secondary: "#64748B" # Slate 500
+  border: "#E2E8F0" # Slate 200
+  accent: "#10B981"
+typography:
+  display-lg:
+    fontFamily: "Inter"
+    fontSize: "44px"
+    fontWeight: 500
+    lineHeight: "52px"
+    letterSpacing: "-0.02em"
+  body-md:
+    fontFamily: "JetBrains Mono"
+    fontSize: "12px"
+    fontWeight: 400
+    lineHeight: "18px"
+  label-md:
+    fontFamily: "Inter"
+    fontSize: "14px"
+    fontWeight: 500
+    lineHeight: "20px"
+rounded:
+  sm: "4px"
+  md: "12px"
+  lg: "20px"
+  full: "9999px"
+spacing:
+  base: "4px"
+  sm: "2px"
+  md: "8px"
+  lg: "16px"
+  xl: "24px"
+  gap: "16px"
+  card-padding: "24px"
+  section-padding: "48px"
+components:
+  button-primary:
+    backgroundColor: "#10B981"
+    textColor: "#FFFFFF"
+    typography: "{typography.label-md}"
+    rounded: "{rounded.full}"
+    padding: "12px 20px"
+  button-secondary:
+    backgroundColor: "#FFFFFF"
+    textColor: "#1E293B"
+    typography: "{typography.label-md}"
+    rounded: "{rounded.full}"
+    padding: "12px 20px"
+    border: "1px solid #E2E8F0"
+  card:
+    rounded: "16px"
+    padding: "24px"
+    backgroundColor: "#FFFFFF"
+    border: "1px solid rgba(0, 0, 0, 0.05)"
 ---
 
-## 1. Aesthetic Identity
-The app uses a **Midnight Tech / Glassmorphism** aesthetic. The background is a deep dark blue-grey, accented by subtle glowing gradients and frosted-glass cards. 
+## Overview
 
-### Core Palette
-- **Background:** Deep Navy Slate (`#020617` / `slate-950`)
-- **Cards/Containers:** Slate Grey (`#0f172a` / `slate-900` at `60%` opacity)
-- **Primary Accents:** Emerald Green (`emerald-400`/`emerald-500`) for credit, totals, and positive actions.
-- **Secondary Accents:** Rose Pink (`rose-400`/`rose-500`) for debt, warnings, and deletions.
-- **Borders:** Dark Slate (`#1e293b` / `slate-800` at `50%` opacity)
+FlatSplit's light theme is engineered for high legibility, clean visual hierarchy, and an ultra-premium aesthetic.
 
----
+- **Layout:** Flex / Bounded
+- **Content Width:** 1280px Max
+- **Framing:** Matte Glass (Light blur with low-opacity borders)
+- **Grid:** Minimalist 12-column
 
-## 2. Typography & Icons
-- **Font Family:** Geist Sans & Geist Mono (Modern geometric sans-serif and code fonts).
-- **Icons:** Lucide Icons (Stroke width `2.0` or `2.5` for clear visual weight).
+## Colors
 
----
+- **Primary (#10B981):** Active status, success, and primary highlights.
+- **Secondary (#3B82F6):** Interactive action targets, blue accents, and links.
+- **Neutral Background (#F8FAFC):** Base slate background.
+- **Surface (#FFFFFF):** Pure white container backgrounds.
+- **Borders (#E2E8F0):** Subtle light-grey borders.
+- **Text Primary (#1E293B):** Sleek, readable text color.
+- **Text Secondary (#64748B):** Supporting details and captions.
 
-## 3. UI Layout & Navigation
-The interface is structured as a single-page app with dynamic layout tabs:
-1. **Import Tab (Default view if DB is empty):** Drag-and-drop CSV box, automatic local import buttons, and USD rate configuration. Features the Anomaly Resolution Center with cards grouped by severity.
-2. **Dashboard Tab:** Color-coded stats, grid cards showing flatmate balances, and Aisha's simplified transaction pathways.
-3. **Rohan's Ledger Tab:** An audit view with selector buttons to choose a flatmate, showing their detailed credit/debt ledger table.
-4. **Timeline Tab:** A graphical calendar view showing Meera leaving and Sam joining.
+## Typography
 
----
+We favor **light to medium weights** (300, 400, 500) over heavy bold styles to maintain a clean editorial feel.
 
-## 4. Micro-Animations & Interactions
-- **Frosted Glass:** Card backgrounds use `backdrop-blur-sm` combined with low opacity borders to create a premium depth effect.
-- **Hover Transitions:** Buttons and interactive ledger rows use `transition-all duration-200 hover:bg-slate-800/80` for feedback.
-- **Color Coding:** Debts and credits are visually color-coded (`text-rose-400` vs `text-emerald-400`) to enable scanning balances at a glance.
+- **Display (`display-lg`):** Inter, 44px, weight 500 (Medium), line-height 52px, letter-spacing -0.02em.
+- **Body (`body-md`):** JetBrains Mono, 12px, weight 400, line-height 18px.
+- **Labels (`label-md`):** Inter, 14px, weight 500, line-height 20px.
+
+## Elevation & Depth
+
+Surfaces should feel light and layered using subtle shadows and thin, light borders instead of heavy dark fills.
+
+- **Surface Style:** Pure White with 98% opacity and 12px backdrop blur.
+- **Borders:** 1px solid rgba(0, 0, 0, 0.04)
+- **Shadows:** 0 1px 3px 0 rgba(0, 0, 0, 0.02), 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 10px 15px -3px rgba(0, 0, 0, 0.04)
+
+## Shapes
+
+- **Corner Radii:** 6px (small elements), 16px (standard cards), 9999px (pills & badges).
+- **Icon Treatment:** Linear, 1.5px stroke weight.
