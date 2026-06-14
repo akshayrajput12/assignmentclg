@@ -34,6 +34,8 @@ export interface NormalizedExpense {
   amount: number;
   originalAmount: number;
   currency: string;
+  exchangeRate: number;
+  amountInr: number;
   splitType: string;
   splitWith: string[];
   splitDetails: { [key: string]: number }; // Normalized owes per person
@@ -611,6 +613,8 @@ export function parseAndAnalyze(csvRows: CSVRow[]): {
       amount,
       originalAmount: parseFloat(row.amount.replace(/,/g, "")),
       currency,
+      exchangeRate,
+      amountInr,
       splitType: row.split_type.trim(),
       splitWith,
       splitDetails,
