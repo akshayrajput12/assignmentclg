@@ -1,0 +1,97 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  email     String?
+  createdAt DateTime @default(now())
+  
+  // Relations
+  memberships GroupMember[]
+  expensesPaid Expense[]      @relation("PaidBy")
+  splits       ExpenseSplit[]
+  paymentsSent Payment[]      @relation("PaidFrom")
+  paymentsRecv Payment[]      @relation("PaidTo")
+}
+
+model Group {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  
+  // Relations
+  members   GroupMember[]
+  expenses  Expense[]
+}
+
+model GroupMember {
+  id        String    @id @default(uuid())
+  groupId   String
+  userId    String
+  joinedAt  DateTime  // To support changing memberships over time
+  leftAt    DateTime? // Null if currently in group
+  
+  // Relations
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}
+
+model Expense {
+  id           String   @id @default(uuid())
+  groupId      String
+  description  String
+  amount       Float
+  currency     String   // INR, USD, etc.
+  exchangeRate Float    @default(1.0) // Converted amount = amount * exchangeRate
+  amountInr    Float    // Standardized currency for balance calculation
+  date         DateTime
+  paidById     String
+  splitType    String   // equal, unequal, percentage, share
+  notes        String?
+  isDuplicate  Boolean  @default(false)
+  duplicateOf  String?  // ID of original expense if duplicate
+  createdAt    DateTime @default(now())
+  
+  // Relations
+  group        Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidBy       User           @relation("PaidBy", fields: [paidById], references: [id], onDelete: Cascade)
+  splits       ExpenseSplit[]
+}
+
+model ExpenseSplit {
+  id        String   @id @default(uuid())
+  expenseId String
+  userId    String
+  amount    Float    // Amount this user owes
+  share     Float?   // Raw share value (percentage or share count)
+  
+  // Relations
+  expense   Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, userId])
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  date        DateTime
+  amount      Float
+  currency    String   @default("INR")
+  fromUserId  String
+  toUserId    String
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  fromUser    User     @relation("PaidFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser      User     @relation("PaidTo", fields: [toUserId], references: [id], onDelete: Cascade)
+}
